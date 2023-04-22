@@ -1,6 +1,20 @@
 # sj
 
-The Shell is
+The Unix Javascript Shell
+
+--pancake
+
+# Current status
+
+* SJ is just a javascript api that is loaded on top of quickjs runtime
+* Provides a shell repl and shell-scripting with javascript
+* No plans to make a new language, maybe just an improved repl with api is enough
+
+# Design ideas
+
+Those are a list of ideas/proposals to implement or discuss in order to improve its usability.
+
+This project is just a proof-of-concept, but may probably evolve into something useful over time.
 
 ## Properties
 
