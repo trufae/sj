@@ -2,12 +2,14 @@
 
 // eval("global.apiTest = 123;");
 const data = slurp("api.sj");
+/*
 try {
-eval (data.trim());
+// eval (data.trim());
 apiTest();
 } catch (e) {
 	echo (e);
 }
+*/
 
 echo ("pos")
 

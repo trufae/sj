@@ -128,12 +128,16 @@ static JSValue sj_env(JSContext *ctx, JSValueConst this_val, int argc, JSValueCo
 
 static JSValue sj_exit(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
 	JSRuntime *rt = JS_GetRuntime (ctx);
-	size_t plen;
-	const char *n = JS_ToCStringLen2 (ctx, &plen, argv[0], false);
-	char *ret = NULL;
-	if (n && *n) {
-		exit (atoi (n));
+	if (argc > 0) {
+		// we should pick a number, not a string
+		size_t plen;
+		const char *n = JS_ToCStringLen2 (ctx, &plen, argv[0], false);
+		char *ret = NULL;
+		if (n && *n) {
+			exit (atoi (n));
+		}
 	}
+	exit (0);
 	return JS_NewBool (ctx, false);
 }
 
@@ -157,8 +161,8 @@ static JSValue sj_echo(JSContext *ctx, JSValueConst this_val, int argc, JSValueC
 }
 
 static const JSCFunctionListEntry funcs[] = {
-	JS_CFUNC_DEF ("system", 1, sj_system),
-	JS_CFUNC_DEF ("chdir", 1, sj_chdir),
+	JS_CFUNC_DEF ("system", 1, sj_system), // $
+	JS_CFUNC_DEF ("chdir", 1, sj_chdir), // cd
 	JS_CFUNC_DEF ("echo", 1, sj_echo),
 	JS_CFUNC_DEF ("exit", 1, sj_exit),
 	JS_CFUNC_DEF ("dump", 1, sj_dump),
@@ -198,6 +202,7 @@ static void js_std_dump_error1(JSContext *ctx, JSValueConst exception_val) {
 		JS_FreeValue (ctx, val);
 	}
 }
+
 void js_std_dump_error(JSContext *ctx) {
 	JSValue exception_val;
 	exception_val = JS_GetException (ctx);
@@ -206,7 +211,7 @@ void js_std_dump_error(JSContext *ctx) {
 }
 
 static void sj_eval(SJ sj, const char *s) {
-	int flags = JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_STRICT; //  | JS_EVAL_TYPE_MODULE;
+	int flags = JS_EVAL_TYPE_GLOBAL; //  | JS_EVAL_FLAG_STRICT; //  | JS_EVAL_TYPE_MODULE;
 	char *space = strchr (s, ' ');
 	JSValue v;
 	if (sj.repl) {
@@ -225,7 +230,11 @@ static void sj_eval(SJ sj, const char *s) {
 			v = JS_Eval (sj.ctx, s, strlen (s), "-", flags);
 		}
 	} else {
-		v = JS_Eval (sj.ctx, s, strlen (s), "-", flags);
+		int sslen = strlen (s) + 64;
+		char * ss = malloc (sslen);
+		snprintf (ss, sslen, "try{%s;}catch(e){echo(e);}", s);
+		v = JS_Eval (sj.ctx, ss, strlen (ss), "-", flags);
+		free (ss);
 	}
 	if (JS_IsException (v)) {
 		js_std_dump_error (sj.ctx);
