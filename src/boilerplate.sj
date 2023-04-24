@@ -34,12 +34,21 @@ class Shell {
 	static $(cmd) {
 		return slurp("|" + cmd);
 	}
+	static tar(filename) {
+		return slurp("|tar c " + filename);
+	}
 	static cat(filename) {
 		if (filename[0] == '|') {
 			return "";
 		}
 		return slurp(filename);
 	}
+}
+Shell.tar.gzip = function(path) {
+	return slurp("|tar cz " + filename);
+}
+Shell.tar.xz = function(path) {
+	return slurp("|tar cj " + filename);
 }
 Shell.ls.files = function(path) {
 	return Shell.ls(path, "-F").split(/\n/g).filter((x) => {
@@ -103,5 +112,5 @@ const cd = function(arg) {
 	return chdir(arg);
 }
 
-const { prompt, home, pushd, popd, pwd, ls, cat } = Shell;
+const { prompt, home, pushd, popd, pwd, ls, cat, tar } = Shell;
 /* MAIN */
