@@ -33,7 +33,7 @@ This project is just a proof-of-concept, but may probably evolve into something 
 * `` is used to get the output of a shell command
 * "" is used for interpolated scripts
 * '' is used for plain strings
-* # can be used for comments/preprocessor rules
+* `#` can be used for comments/preprocessor rules
 
 ## Preprocessor
 
