@@ -21,6 +21,7 @@
  * <term>       := <id>
  *              := <int> 
  *              := <paren_expr> 
+ * <string>     := "\"" <a_quoted_text> "\""
  * <id>         := <a_finite_sequence_of_acceptable_symbols>
  * <num>        := <an_unsigned_decimal_integer> 
  */
@@ -50,6 +51,7 @@ enum {
 	MUL_SYM,
 	MINUS_SYM,
 	LESS_SYM,
+	GREAT_SYM,
 	SEMI_SYM,
 	EQUAL_SYM,
 	NUM_SYM,
@@ -63,8 +65,9 @@ const char *words[] = {"do", "else", "if", "while", "print", "system", NULL};
 typedef struct {
 	int ch;
 	int num_val;
+	// char str_val text[100];
 	int sym;
-	const char *code;
+	const char *code; // readonly source code to evaluate
 	char id_name[100];
 } State;
 
@@ -93,18 +96,50 @@ again:
 	case 0:
 	case ' ':
 	case '\t':
+	case '\r':
 	case '\n':
 		next_ch (s);
 		goto again;
-	case EOF:
+	case EOF: // -1
 		s->sym = EOI_SYM;
 		break;
+	case '"':
+		next_ch (s);
+		char *p = s->id_name;
+		while ((int)s->ch > 0 && s->ch != '"') {
+			if (s->ch == '\\') {
+				next_ch (s);
+				switch ((int)s->ch) {
+				case -1:
+					// do nothing
+					break;
+				case 'r': // \n
+					*p = '\r';
+					break;
+				case 'n': // \n
+					*p = '\n';
+					break;
+				default:
+					*p = s->ch;
+					break;
+				}
+			} else {
+				*p = s->ch;
+			}
+			next_ch (s);
+			p++;
+		}
+		*p = 0;
+		s->num_val = atoi (s->id_name);
+		s->sym = STR_SYM;
+		next_ch (s);
+		break;
 	case '{':
-		next_ch(s);
+		next_ch (s);
 		s->sym = LBRA_SYM;
 		break;
 	case '}':
-		next_ch(s);
+		next_ch (s);
 		s->sym = RBRA_SYM;
 		break;
 	case '(':
@@ -135,8 +170,12 @@ again:
 		next_ch(s);
 		s->sym = LESS_SYM;
 		break;
-	case ';':
+	case '>':
 		next_ch(s);
+		s->sym = GREAT_SYM;
+		break;
+	case ';':
+		next_ch (s);
 		s->sym = SEMI_SYM;
 		break;
 	case '=':
@@ -150,6 +189,7 @@ again:
 		s->sym = DOLAR_SYM;
 		break;
 #endif
+#if 0
 	case '"':
 		s->id_name[0] = 0;
 		next_ch(s);
@@ -162,6 +202,7 @@ again:
 		s->id_name[n] = 0;
 		s->sym = STR_SYM;
 		break;
+#endif
 	default:
 		if (s->ch >= '0' && s->ch <= '9') {
 			s->num_val = 0;
@@ -185,7 +226,7 @@ again:
 				s->sym = ID_SYM;
 			}
 		} else {
-			syntax_error(s, "unknown symbol");
+			syntax_error (s, "unknown symbol");
 		}
 	}
 }
@@ -202,6 +243,7 @@ enum NodeKind {
 	DIV,
 	SUB,
 	LT,
+	GT,
 	SET,
 	IF,
 	IFELSE,
@@ -228,22 +270,23 @@ typedef struct node {
 static node *paren_expr(State *s);
 
 void consume(State *s, int expected) {
-	if (s->sym == expected)
-		next_sym(s);
-	else
-		syntax_error(s, "unknown expected");
+	if (s->sym == expected) {
+		next_sym (s);
+	} else {
+		syntax_error (s, "unknown expected");
+	}
 }
 
 node *new_node(enum NodeKind k) {
-	node *x = malloc(sizeof(node));
+	node *x = malloc (sizeof (node));
 	x->kind = k;
 	return x;
 }
 
 node *id(State *s) {
-	node *x = new_node(VAR);
+	node *x = new_node (VAR);
 	strcpy (x->id, s->id_name); /// XXX overflow
-	next_sym(s);
+	next_sym (s);
 	return x;
 }
 
@@ -257,9 +300,12 @@ node *num(State *s) {
 node *str(State *s) {
 	node *x = new_node(STR);
 	strcpy (x->id, s->id_name);
+	x->val = atoi (s->id_name);
+	printf ("STR (%s)\n", x->id);
 	next_sym (s);
 	return x;
 }
+
 node *term(State *s) {
 	if (s->sym == ID_SYM) {
 		return id(s);
@@ -274,7 +320,7 @@ node *term(State *s) {
 }
 
 node *sum(State *s) {
-	node *x = term(s);
+	node *x = term (s);
 	while (s->sym == PLUS_SYM || s->sym == MINUS_SYM || s->sym == DIV_SYM || s->sym == MUL_SYM) {
 		node *t = x;
 		int type = 0;
@@ -292,10 +338,10 @@ node *sum(State *s) {
 			type = SUB;
 			break;
 		}
-		x = new_node(type);
+		x = new_node (type);
 		next_sym (s);
 		x->o1 = t;
-		x->o2 = term(s);
+		x->o2 = term (s);
 	}
 	return x;
 }
@@ -304,26 +350,38 @@ node *test(State *s) {
 	node *x = sum(s);
 	if (s->sym == LESS_SYM) {
 		node *t = x;
-		x = new_node(LT);
-		next_sym(s);
+		x = new_node (LT);
+		next_sym (s);
 		x->o1 = t;
-		x->o2 = sum(s);
+		x->o2 = sum (s);
+	} else if (s->sym == GREAT_SYM) {
+		node *t = x;
+		x = new_node (GT);
+		next_sym (s);
+		x->o1 = t;
+		x->o2 = sum (s);
 	}
 	return x;
 }
 
 node *expr(State *s) {
+	if (s->sym == STR_SYM) {
+		node *x = new_node (STR);
+		strcpy (x->id, s->id_name);
+		next_sym (s);
+		return x;
+	}
 	if (s->sym != ID_SYM) {
 		return test(s);
 	}
 
-	node *x = test(s);
+	node *x = test (s);
 	if (x->kind == VAR && s->sym == EQUAL_SYM) {
 		node *t = x;
 		x = new_node (SET);
 		next_sym (s);
-		x->o1 = t;
-		x->o2 = expr (s);
+		x->o1 = t; // key
+		x->o2 = expr (s); // value
 	}
 	return x;
 }
@@ -351,10 +409,10 @@ node *statement(State *s) {
 		}
 		break;
 	case WHILE_SYM:
-		x = new_node(WHILE);
+		x = new_node (WHILE);
 		next_sym (s);
 		x->o1 = paren_expr (s);
-		x->o2 = statement(s);
+		x->o2 = statement (s);
 		break;
 	case DO_SYM:
 		x = new_node(DO);
@@ -385,16 +443,16 @@ node *statement(State *s) {
 			x->o1 = t;
 			x->o2 = statement(s);
 		}
-		next_sym(s);
+		next_sym (s);
 		break;
 	case SEMI_SYM:
 		x = new_node(EMPTY);
-		next_sym(s);
+		next_sym (s);
 		break;
 	default:
 		x = new_node(EXPR);
 		x->o1 = expr(s);
-		consume(s, SEMI_SYM);
+		consume (s, SEMI_SYM);
 	}
 
 	return x;
@@ -407,7 +465,9 @@ node *program(State *s) {
 	return x;
 }
 
-void print_ast(node *x) {
+void print_ast(node *x, int d) {
+	int i;
+	printf ("(");
 	switch (x->kind) {
 	case VAR:
 		printf("VAR \"%s\" ", x->id);
@@ -419,73 +479,78 @@ void print_ast(node *x) {
 		printf("STR \"%s\" ", x->id);
 		break;
 	case MUL:
-		print_ast(x->o1);
+		print_ast(x->o1, d+1);
 		printf("MUL ");
-		print_ast(x->o2);
+		print_ast(x->o2, d+1);
 		break;
 	case ADD:
-		print_ast(x->o1);
+		print_ast(x->o1, d+1);
 		printf("ADD ");
-		print_ast(x->o2);
+		print_ast(x->o2, d+1);
 		break;
 	case SUB:
-		print_ast(x->o1);
+		print_ast(x->o1, d+1);
 		printf("SUB ");
-		print_ast(x->o2);
+		print_ast(x->o2, d+1);
+		break;
+	case GT:
+		print_ast(x->o1, d+1);
+		printf("GT ");
+		print_ast(x->o2, d+1);
 		break;
 	case LT:
-		print_ast(x->o1);
+		print_ast(x->o1, d+1);
 		printf("LT ");
-		print_ast(x->o2);
+		print_ast(x->o2, d+1);
 		break;
 	case SET:
 		printf("SET ");
-		print_ast(x->o1);
-		print_ast(x->o2);
+		print_ast(x->o1, d+1);
+		print_ast(x->o2, d+1);
 		break;
 	case IF:
 		printf("IF ");
-		print_ast(x->o1);
-		print_ast(x->o2);
+		print_ast(x->o1, d+1);
+		print_ast(x->o2, d+1);
 		break;
 	case IFELSE:
 		printf("IF ");
-		print_ast(x->o1);
-		print_ast(x->o2);
+		print_ast(x->o1, d+1);
+		print_ast(x->o2, d+1);
 		printf("ELSE ");
-		print_ast(x->o3);
+		print_ast(x->o3, d+1);
 		break;
 	case EXPR:
 		printf("EXPR ");
-		print_ast(x->o1);
+		print_ast(x->o1, d+1);
 		break;
 	case SEQ:
 		printf("SEQ ");
-		print_ast(x->o1);
-		print_ast(x->o2);
+		print_ast(x->o1, d+1);
+		print_ast(x->o2, d+1);
 		break;
 	case SYSTEM:
 		printf("SYSTEM ");
-		print_ast(x->o1);
+		print_ast(x->o1, d+1);
 		break;
 	case PRINT:
 		printf("PRINT ");
-		print_ast(x->o1);
+		print_ast(x->o1, d+1);
 		break;
 	case WHILE:
 		printf("WHILE ");
-		print_ast(x->o1);
-		print_ast(x->o2);
+		print_ast(x->o1, d+1);
+		print_ast(x->o2, d+1);
 		break;
 	case DO:
 		printf("DO ");
-		print_ast(x->o1);
+		print_ast(x->o1, d+1);
 		printf("WHILE ");
-		print_ast(x->o2);
+		print_ast(x->o2, d+1);
 		break;
 	case PROG:
 		printf("PROG ");
-		print_ast(x->o1);
+		print_ast (x->o1, d+1);
 		break;
 	case EMPTY:
 		printf("EMPTY ");
@@ -493,6 +558,10 @@ void print_ast(node *x) {
 	default:
 		syntax_error (NULL, "unknown node");
 		break;
+	}
+	printf (")");
+	if (d == 0) {
+		printf ("\n");
 	}
 }
 
@@ -513,12 +582,12 @@ typedef struct list {
 
 list *env;
 
-list *get_id(char *id)
-{
-	for (list *lst = env; lst; lst = lst->next)
-		if (strcmp(lst->id, id) == 0)
+list *get_id(char *id) {
+	for (list *lst = env; lst; lst = lst->next) {
+		if (!strcmp (lst->id, id)) {
 			return lst;
-
+		}
+	}
 	return (list *)NULL;
 }
 
@@ -562,7 +631,7 @@ int eval_expr(State *s, node *x) {
 	case CST:
 		return x->val;
 	case STR:
-		return atoi(x->id);
+		return atoi (x->id);
 	case MUL:
 		return eval_expr(s, x->o1) * eval_expr(s, x->o2);
 	case DIV:
@@ -578,6 +647,8 @@ int eval_expr(State *s, node *x) {
 		return eval_expr(s, x->o1) + eval_expr(s, x->o2);
 	case SUB:
 		return eval_expr(s, x->o1) - eval_expr(s, x->o2);
+	case GT:
+		return eval_expr(s, x->o1) > eval_expr(s, x->o2);
 	case LT:
 		return eval_expr(s, x->o1) < eval_expr(s, x->o2);
 	case SET:
@@ -598,7 +669,6 @@ int eval_expr(State *s, node *x) {
 void eval_statement(State *s, node *x) {
 	switch (x->kind) {
 	case SYSTEM:
-		// TODO: support strings
 		if (x->o1->kind == STR) {
 			system (x->o1->id);
 		} else {
@@ -608,9 +678,9 @@ void eval_statement(State *s, node *x) {
 		break;
 	case PRINT:
 		if (x->o1->kind == STR) {
-			printf("%s\n", x->o1->id); // eval_expr (s, x->o1));
+			printf ("%s\n", x->o1->id);
 		} else {
-			printf("%d\n", eval_expr (s, x->o1));
+			printf ("%d\n", eval_expr (s, x->o1));
 		}
 		break;
 	case IF:
@@ -664,8 +734,7 @@ void free_program(State *s, node *x) {
 int main(int argc, char **argv) {
 	State s = {0};
 	node *prog = parse (&s, (argc>1)?argv[1]: NULL);
-//	print_ast (prog);
-//	printf ("\n");
+	print_ast (prog, 0);
 	eval_program (&s, prog);
 	free_program (&s, prog);
 	return 0;
