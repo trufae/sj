@@ -17,3 +17,10 @@ all:
 # echo '{foo=(num, msg){print("pop");foo(32)}' | ./si
 	echo '{print(32); // oneline comment \n \
 		print(64);}' | ./si | grep 64
+
+DESTDIR?=
+PREFIX?=/usr/local
+BINDIR=$(PREFIX)/bin
+
+install:
+	ln -fs $(shell pwd)/si $(DESTDIR)/$(BINDIR)/si

@@ -654,6 +654,13 @@ void print_ast(node *x, int d) {
 }
 
 node *parse(State *s, const char *code) {
+	// skip hashbang
+	if (code && !strncmp (code, "#!", 2)) {
+		char *nl = strchr (code, '\n');
+		if (nl) {
+			code = nl + 1;
+		}
+	}
 	s->code = code;
 	next_sym (s);
 	return program (s);
@@ -671,17 +678,13 @@ static list *get_id(State *s, char *id) {
 	return (list *)NULL;
 }
 
-static void lookup_error(char *id) {
-	fprintf(stderr, "error looking up %s\n", id);
-	exit(1);
-}
-
 static int lookup_value(State *s, char *id) {
 	list *pid = get_id (s, id);
 	if (pid) {
 		return pid->value;
 	}
-	lookup_error (id);
+	fprintf (stderr, "lookup error %s\n", id);
+	// exit ?
 	return -1;
 }
 
@@ -699,12 +702,12 @@ static void add_id(State *s, char *id, int value) {
 	s->env = lst;
 }
 
-void eval_error(State *s) {
-	fprintf(stderr, "semantics error");
-	exit(1);
+static void eval_error(State *s) {
+	fprintf (stderr, "semantics error");
+	exit (1);
 }
 
-int eval_expr(State *s, node *x) {
+static int eval_expr(State *s, node *x) {
 	switch (x->kind) {
 	case VAR:
 		return lookup_value (s, x->id);
