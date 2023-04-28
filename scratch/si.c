@@ -35,14 +35,14 @@
 /* Tokenizer */
 
 enum {
-	DO_SYM,
+	DO_SYM = 0,
 	ELSE_SYM,
 	IF_SYM,
 	WHILE_SYM,
 	PRINT_SYM,
 	SYSTEM_SYM,
 
-	LBRA_SYM,
+	LBRA_SYM = 6,
 	RBRA_SYM,
 	LPAR_SYM,
 	RPAR_SYM,
@@ -57,6 +57,8 @@ enum {
 	NUM_SYM,
 	STR_SYM,
 	ID_SYM,
+	COMMA_SYM,
+	DOT_SYM,
 	EOI_SYM
 };
 
@@ -71,12 +73,13 @@ typedef struct {
 	char id_name[100];
 } State;
 
-void syntax_error(State *s, char *msg) {
+static void syntax_error(State *s, char *msg) {
 	// return error code instead
 	fprintf(stderr, "syntax error - %s\n", msg);
 	exit(1);
 }
-void next_ch(State *s) {
+
+static void next_ch(State *s) {
 	if (s->code) {
 		s->ch = *s->code;
 		if (s->ch == 0) {
@@ -86,11 +89,11 @@ void next_ch(State *s) {
 			s->code++;
 		}
 	} else {
-		s->ch = getchar();
+		s->ch = getchar ();
 	}
 }
 
-void next_sym(State *s) {
+static void next_sym(State *s) {
 again:
 	switch (s->ch) {
 	case 0:
@@ -134,6 +137,14 @@ again:
 		s->sym = STR_SYM;
 		next_ch (s);
 		break;
+	case ',':
+		next_ch (s);
+		s->sym = COMMA_SYM;
+		break;
+	case '.':
+		next_ch (s);
+		s->sym = DOT_SYM;
+		break;
 	case '{':
 		next_ch (s);
 		s->sym = LBRA_SYM;
@@ -151,7 +162,39 @@ again:
 		s->sym = RPAR_SYM;
 		break;
 	case '/':
-		next_ch(s);
+		next_ch (s);
+		if (s->ch == '/') {
+			// read until \n
+			while (1) {
+				next_ch (s);
+				if (s->ch < 1 || s->ch == '\n') {
+					break;
+				}
+			}
+			goto again;
+		} else if (s->ch == '*') {
+			// skip until '*/' and support nested comments
+			int level = 1;
+			do {
+				next_ch (s);
+				if (s->ch == '/') {
+					next_ch (s);
+					if (s->ch == '*') {
+						level++;
+					}
+				} else if (s->ch == '*') {
+					next_ch (s);
+					if (s->ch == '/') {
+						level--;
+						if (level == 0) {
+							break;
+						}
+					}
+				}
+			} while (s->ch > 0);
+			next_ch (s);
+			goto again;
+		}
 		s->sym = DIV_SYM;
 		break;
 	case '*':
@@ -269,7 +312,7 @@ typedef struct node {
 } node;
 static node *paren_expr(State *s);
 
-void consume(State *s, int expected) {
+static void consume(State *s, int expected) {
 	if (s->sym == expected) {
 		next_sym (s);
 	} else {
@@ -277,27 +320,27 @@ void consume(State *s, int expected) {
 	}
 }
 
-node *new_node(enum NodeKind k) {
+static node *new_node(enum NodeKind k) {
 	node *x = malloc (sizeof (node));
 	x->kind = k;
 	return x;
 }
 
-node *id(State *s) {
+static node *id(State *s) {
 	node *x = new_node (VAR);
 	strcpy (x->id, s->id_name); /// XXX overflow
 	next_sym (s);
 	return x;
 }
 
-node *num(State *s) {
+static node *num(State *s) {
 	node *x = new_node(CST);
 	x->val = s->num_val;
 	next_sym (s);
 	return x;
 }
 
-node *str(State *s) {
+static node *str(State *s) {
 	node *x = new_node(STR);
 	strcpy (x->id, s->id_name);
 	x->val = atoi (s->id_name);
@@ -306,7 +349,7 @@ node *str(State *s) {
 	return x;
 }
 
-node *term(State *s) {
+static node *term(State *s) {
 	if (s->sym == ID_SYM) {
 		return id(s);
 	}
@@ -319,7 +362,7 @@ node *term(State *s) {
 	return paren_expr (s);
 }
 
-node *sum(State *s) {
+static node *sum(State *s) {
 	node *x = term (s);
 	while (s->sym == PLUS_SYM || s->sym == MINUS_SYM || s->sym == DIV_SYM || s->sym == MUL_SYM) {
 		node *t = x;
@@ -346,7 +389,7 @@ node *sum(State *s) {
 	return x;
 }
 
-node *test(State *s) {
+static node *test(State *s) {
 	node *x = sum(s);
 	if (s->sym == LESS_SYM) {
 		node *t = x;
@@ -364,12 +407,49 @@ node *test(State *s) {
 	return x;
 }
 
-node *expr(State *s) {
+static node *expr(State *s) {
 	if (s->sym == STR_SYM) {
 		node *x = new_node (STR);
 		strcpy (x->id, s->id_name);
 		next_sym (s);
 		return x;
+	}
+	if (s->sym == LPAR_SYM) {
+		// this is a function definition
+		printf ("FUNCTION DEFINITION\n");
+		next_sym (s);
+		while (1) {
+			int sym = s->sym;
+			if (sym == ID_SYM) {
+				// arg name
+				// define the type using $ @ # for number, array, hashtable
+				printf ("ARG (%s)\n", s->id_name);
+			} else if (sym == RPAR_SYM) {
+				break;
+			} else if (sym == COMMA_SYM) {
+				printf ("Comma\n");
+			} else {
+				printf ("invalid syntax\n");
+				return NULL;
+			}
+			next_sym (s);
+		}
+		printf ("SYM %d\n", s->sym);
+		if (s->sym == RPAR_SYM) {
+			printf ("END OF ARGS\n");
+		}
+		next_sym (s);
+		if (s->sym != LBRA_SYM) {
+			printf ("expected '{' after `)` function definition\n");
+			return NULL;
+		}
+		while (s->ch < 1) {
+			next_sym (s);
+		}
+		printf ("NODE TYPE %d %d\n", s->sym, s->sym == ID_SYM);
+		// expect { ... function body ... }
+		printf ("NODE TYPE %d\n", s->sym);
+		return expr (s);
 	}
 	if (s->sym != ID_SYM) {
 		return test(s);
@@ -393,19 +473,19 @@ static node *paren_expr(State *s) {
 	return x;
 }
 
-node *statement(State *s) {
+static node *statement(State *s) {
 	node *x;
 	switch (s->sym) {
 	case IF_SYM:
 		next_sym (s);
-		x = new_node(IF);
+		x = new_node (IF);
 		x->o1 = paren_expr (s);
-		x->o2 = statement(s);
+		x->o2 = statement (s);
 		if (s->sym == ELSE_SYM)
 		{
 			x->kind = IFELSE;
 			next_sym (s);
-			x->o3 = statement(s);
+			x->o3 = statement (s);
 		}
 		break;
 	case WHILE_SYM:
@@ -426,7 +506,7 @@ node *statement(State *s) {
 		x = new_node(SYSTEM);
 		next_sym (s);
 		x->o1 = paren_expr(s);
-		consume(s, SEMI_SYM);
+		consume (s, SEMI_SYM);
 		break;
 	case PRINT_SYM:
 		x = new_node(PRINT);
@@ -633,29 +713,29 @@ int eval_expr(State *s, node *x) {
 	case STR:
 		return atoi (x->id);
 	case MUL:
-		return eval_expr(s, x->o1) * eval_expr(s, x->o2);
+		return eval_expr (s, x->o1) * eval_expr (s, x->o2);
 	case DIV:
 		{
 			int res = eval_expr (s, x->o2);
 			if (res > 0) {
-				return eval_expr(s, x->o1) / res;
+				return eval_expr (s, x->o1) / res;
 			}
-			eval_error(s);
+			eval_error (s);
 		}
 		break;
 	case ADD:
-		return eval_expr(s, x->o1) + eval_expr(s, x->o2);
+		return eval_expr (s, x->o1) + eval_expr (s, x->o2);
 	case SUB:
-		return eval_expr(s, x->o1) - eval_expr(s, x->o2);
+		return eval_expr (s, x->o1) - eval_expr (s, x->o2);
 	case GT:
-		return eval_expr(s, x->o1) > eval_expr(s, x->o2);
+		return eval_expr (s, x->o1) > eval_expr (s, x->o2);
 	case LT:
-		return eval_expr(s, x->o1) < eval_expr(s, x->o2);
+		return eval_expr (s, x->o1) < eval_expr (s, x->o2);
 	case SET:
 		{
 			node *var = x->o1;
 			int val = eval_expr (s, x->o2);
-			add_id(var->id, val);
+			add_id (var->id, val);
 			return val;
 		}
 		break;
@@ -690,9 +770,9 @@ void eval_statement(State *s, node *x) {
 		break;
 	case IFELSE:
 		if (eval_expr (s, x->o1)) {
-			eval_statement(s, x->o2);
+			eval_statement (s, x->o2);
 		} else {
-			eval_statement(s, x->o3);
+			eval_statement (s, x->o3);
 		}
 		break;
 	case WHILE:
