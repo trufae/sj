@@ -1,0 +1,11 @@
+/*
+ * io.si : provide basic input and output
+ */
+{
+	version = "0.1.0";
+	/*
+	println = (msg) {
+		system("echo ${msg}")
+	}
+	*/
+}

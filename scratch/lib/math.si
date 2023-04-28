@@ -1,0 +1,11 @@
+/* this is a one line comment */
+/* math library */
+{
+	pi = 3.14;
+	pow = (n) {
+		print("hello")
+	}
+	sum = (a, b) {
+		return a + b;
+	}
+}

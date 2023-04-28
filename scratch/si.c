@@ -1,29 +1,29 @@
-/* 
+/*
  * <program>   := <statement>
  * <statement> := "if" <paren_expr> <statement>
- *             := "if" <paren_expr> <statement> "else" <statement> 
- *             := "while" <paren_expr> <statement> 
- *             := "do" <statement> "while" <paren_expr> ";" 
+ *             := "if" <paren_expr> <statement> "else" <statement>
+ *             := "while" <paren_expr> <statement>
+ *             := "do" <statement> "while" <paren_expr> ";"
  *             := "print" <paren_expr> ";"
  *             := "system" <paren_expr> ";"
- *             := "{" { <statement> } "}" 
- *             := <expr> ";" 
+ *             := "{" { <statement> } "}"
+ *             := <expr> ";"
  *             := ";"
- * 
+ *
  * <paren_expr> := "(" <expr> ")"
- * <expr>       := <test> 
- *              := <id> "=" <expr> 
- * <test>       := <sum> 
+ * <expr>       := <test>
+ *              := <id> "=" <expr>
+ * <test>       := <sum>
  *              := <sum> "<" <sum>
- * <sum>        := <term> 
- *              := <sum> "+" <term> 
- *              := <sum> "-"  <term> 
+ * <sum>        := <term>
+ *              := <sum> "+" <term>
+ *              := <sum> "-"  <term>
  * <term>       := <id>
- *              := <int> 
- *              := <paren_expr> 
+ *              := <int>
+ *              := <paren_expr>
  * <string>     := "\"" <a_quoted_text> "\""
  * <id>         := <a_finite_sequence_of_acceptable_symbols>
- * <num>        := <an_unsigned_decimal_integer> 
+ * <num>        := <an_unsigned_decimal_integer>
  */
 
 #include <stdio.h>
@@ -813,8 +813,41 @@ void free_program(State *s, node *x) {
 
 int main(int argc, char **argv) {
 	State s = {0};
-	node *prog = parse (&s, (argc>1)?argv[1]: NULL);
-	print_ast (prog, 0);
+	char *code = NULL;
+	if (argc > 1) {
+		if (!strcmp (argv[1], "-v")) {
+			printf ("si v0.1.0\n");
+			return 0;
+		} else if (!strcmp (argv[1], "-h")) {
+			printf ("si [-v|-h] ([-e expr] | [file] | < code)\n");
+			printf ("environment: SI_AST (print abstract structured tree)\n");
+			return 0;
+		} else if (argc > 2 && !strcmp (argv[1], "-e")) {
+			code = argv[2];
+		} else {
+			FILE *fd = fopen (argv[1], "r");
+			if (!fd) {
+				fprintf (stderr, "Cannot open file\n");
+				return 1;
+			}
+			fseek (fd, 0, SEEK_END);
+			int fs = ftell (fd);
+			if (fs < 1) {
+				fclose (fd);
+				return 0;
+			}
+			code = malloc (fs + 1);
+			fseek (fd, 0, SEEK_SET);
+			fread (code, 1, fs, fd);
+			code[fs] = 0;
+			fclose (fd);
+		}
+	}
+	node *prog = parse (&s, code);
+	const char *si_ast = getenv ("SI_AST");
+	if (si_ast && *si_ast) {
+		print_ast (prog, 0);
+	}
 	eval_program (&s, prog);
 	free_program (&s, prog);
 	return 0;
