@@ -64,6 +64,13 @@ enum {
 
 const char *words[] = {"do", "else", "if", "while", "print", "system", NULL};
 
+typedef struct list {
+	char *id;
+	int value;
+	struct list *next;
+} list;
+
+
 typedef struct {
 	int ch;
 	int num_val;
@@ -71,11 +78,12 @@ typedef struct {
 	int sym;
 	const char *code; // readonly source code to evaluate
 	char id_name[100];
+	list *env; // kv of globals :?
 } State;
 
 static void syntax_error(State *s, char *msg) {
 	// return error code instead
-	fprintf(stderr, "syntax error - %s\n", msg);
+	fprintf (stderr, "syntax error - %s\n", msg);
 	exit(1);
 }
 
@@ -654,16 +662,8 @@ node *parse(State *s, const char *code) {
 /*----------------------------------------------------------------------------*/
 /* Interpreter */
 
-typedef struct list {
-	char *id;
-	int value;
-	struct list *next;
-} list;
-
-list *env;
-
-list *get_id(char *id) {
-	for (list *lst = env; lst; lst = lst->next) {
+static list *get_id(State *s, char *id) {
+	for (list *lst = s->env; lst; lst = lst->next) {
 		if (!strcmp (lst->id, id)) {
 			return lst;
 		}
@@ -671,13 +671,13 @@ list *get_id(char *id) {
 	return (list *)NULL;
 }
 
-void lookup_error(char *id) {
+static void lookup_error(char *id) {
 	fprintf(stderr, "error looking up %s\n", id);
 	exit(1);
 }
 
-static int lookup_value(char *id) {
-	list *pid = get_id (id);
+static int lookup_value(State *s, char *id) {
+	list *pid = get_id (s, id);
 	if (pid) {
 		return pid->value;
 	}
@@ -685,18 +685,18 @@ static int lookup_value(char *id) {
 	return -1;
 }
 
-void add_id(char *id, int value) {
-	list *pid = get_id (id);
+static void add_id(State *s, char *id, int value) {
+	list *pid = get_id (s, id);
 	if (pid) {
 		pid->value = value;
 		return;
 	}
 
-	list *lst = malloc(sizeof(list));
+	list *lst = malloc (sizeof (list));
 	lst->id = id;
 	lst->value = value;
-	lst->next = env;
-	env = lst;
+	lst->next = s->env;
+	s->env = lst;
 }
 
 void eval_error(State *s) {
@@ -707,7 +707,7 @@ void eval_error(State *s) {
 int eval_expr(State *s, node *x) {
 	switch (x->kind) {
 	case VAR:
-		return lookup_value (x->id);
+		return lookup_value (s, x->id);
 	case CST:
 		return x->val;
 	case STR:
@@ -735,7 +735,7 @@ int eval_expr(State *s, node *x) {
 		{
 			node *var = x->o1;
 			int val = eval_expr (s, x->o2);
-			add_id (var->id, val);
+			add_id (s, var->id, val);
 			return val;
 		}
 		break;
