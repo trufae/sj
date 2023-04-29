@@ -735,6 +735,7 @@ static void eval_error(State *s) {
 
 static char *eval_string(State *state, char * restrict s) {
 	char *res = malloc (2 + strlen (s) * 2);
+	char *ores = res;
 	while (*s) {
 		if (!strncmp (s, "${", 2)) {
 			char *e = strchr (s + 2, '}');
@@ -745,7 +746,6 @@ static char *eval_string(State *state, char * restrict s) {
 			*e = 0;
 			size_t len = e - s;
 			list *id = get_id (state, s + 2);
-printf ("jejej %s\n", s+2);
 			if (!id) {
 				fprintf (stderr, "unknown variable}\n");
 				*e = '}';
@@ -760,7 +760,7 @@ printf ("jejej %s\n", s+2);
 		}
 	}
 	*res = 0;
-	return res;
+	return ores;
 }
 
 static int eval_expr(State *s, node *x) {
@@ -821,13 +821,11 @@ void eval_statement(State *s, node *x) {
 	case PRINT:
 		if (x->o1->kind == STR) {
 			char *q = eval_string (s, x->o1->id);
-printf ("evaled string\n");
 			printf ("%s\n", q);
 			free (q);
 		} else {
 			// TODO this is wip
 			if (x->o1->kind == VAR) {
-printf ("THis is a var\n");
 		//		lookup_value (s, x->o1->id);
 			}
 			int n = eval_expr (s, x->o1);

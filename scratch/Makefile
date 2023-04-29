@@ -6,7 +6,7 @@
 
 
 all:
-	gcc -g -o si si.c
+	gcc -fsanitize=address -g -o si si.c
 	echo '{a=1;print(a+2);}' | ./si | grep 3
 	echo '{a=1024;print(a-2);}' | ./si | grep 1022
 	echo '{a="Hello world";}' | SI_AST=1 ./si | grep 'STR "Hell'
@@ -17,7 +17,7 @@ all:
 # echo '{foo=(num, msg){print("pop");foo(32)}' | ./si
 	echo '{print(32); // oneline comment \n \
 		print(64);}' | ./si | grep 64
-	echo '{a=33;print("$${a}"); }' | ./si
+	echo '{a=33;print("the result is $${a}"); }' | ./si | grep 'is 33'
 
 DESTDIR?=
 PREFIX?=/usr/local
