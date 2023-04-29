@@ -15,6 +15,7 @@
  *              := <id> "=" <expr>
  * <test>       := <sum>
  *              := <sum> "<" <sum>
+ *              := <sum> "==" <sum>
  * <sum>        := <term>
  *              := <sum> "+" <term>
  *              := <sum> "-"  <term>
@@ -53,7 +54,8 @@ enum {
 	LESS_SYM,
 	GREAT_SYM,
 	SEMI_SYM,
-	EQUAL_SYM,
+	EQUAL_SYM, // = ; assign
+	SAME_SYM, // == ; compare
 	NUM_SYM,
 	STR_SYM,
 	ID_SYM,
@@ -67,6 +69,7 @@ const char *words[] = {"do", "else", "if", "while", "print", "system", NULL};
 typedef struct list {
 	char *id;
 	int value;
+// TODO add type and string value
 	struct list *next;
 } list;
 
@@ -91,8 +94,7 @@ static void next_ch(State *s) {
 	if (s->code) {
 		s->ch = *s->code;
 		if (s->ch == 0) {
-			s->ch = -1;
-			s->code = NULL;
+			s->ch = EOF;
 		} else {
 			s->code++;
 		}
@@ -120,8 +122,11 @@ again:
 		while ((int)s->ch > 0 && s->ch != '"') {
 			if (s->ch == '\\') {
 				next_ch (s);
+				if (s->ch == EOF) {
+					break;
+				}
 				switch ((int)s->ch) {
-				case -1:
+				case 0:
 					// do nothing
 					break;
 				case 'r': // \n
@@ -231,7 +236,12 @@ again:
 		break;
 	case '=':
 		next_ch (s);
-		s->sym = EQUAL_SYM;
+		if (s->ch == '=') {
+			next_ch (s);
+			s->sym = SAME_SYM;
+		} else {
+			s->sym = EQUAL_SYM;
+		}
 		break;
 #if 0
 	case '$':
@@ -295,6 +305,7 @@ enum NodeKind {
 	SUB,
 	LT,
 	GT,
+	EQ,
 	SET,
 	IF,
 	IFELSE,
@@ -388,6 +399,9 @@ static node *sum(State *s) {
 		case MINUS_SYM:
 			type = SUB;
 			break;
+		case SAME_SYM:
+			type = EQ;
+			break;
 		}
 		x = new_node (type);
 		next_sym (s);
@@ -398,13 +412,19 @@ static node *sum(State *s) {
 }
 
 static node *test(State *s) {
-	node *x = sum(s);
+	node *x = sum (s);
 	if (s->sym == LESS_SYM) {
 		node *t = x;
 		x = new_node (LT);
 		next_sym (s);
 		x->o1 = t;
 		x->o2 = sum (s);
+	} else if (s->sym == SAME_SYM) {
+		node *t = x;
+		x = new_node (EQ);
+		next_sym (s);
+		x->o1 = t;
+		x->o2 = sum(s);
 	} else if (s->sym == GREAT_SYM) {
 		node *t = x;
 		x = new_node (GT);
@@ -513,14 +533,14 @@ static node *statement(State *s) {
 	case SYSTEM_SYM:
 		x = new_node(SYSTEM);
 		next_sym (s);
-		x->o1 = paren_expr(s);
+		x->o1 = paren_expr (s);
 		consume (s, SEMI_SYM);
 		break;
 	case PRINT_SYM:
-		x = new_node(PRINT);
+		x = new_node (PRINT);
 		next_sym (s);
-		x->o1 = paren_expr(s);
-		consume(s, SEMI_SYM);
+		x->o1 = paren_expr (s);
+		consume (s, SEMI_SYM);
 		break;
 	case LBRA_SYM:
 		x = new_node(EMPTY);
@@ -534,13 +554,14 @@ static node *statement(State *s) {
 		next_sym (s);
 		break;
 	case SEMI_SYM:
-		x = new_node(EMPTY);
+		x = new_node (EMPTY);
 		next_sym (s);
 		break;
 	default:
-		x = new_node(EXPR);
-		x->o1 = expr(s);
+		x = new_node (EXPR);
+		x->o1 = expr (s);
 		consume (s, SEMI_SYM);
+		break;
 	}
 
 	return x;
@@ -586,6 +607,11 @@ void print_ast(node *x, int d) {
 		printf("GT ");
 		print_ast(x->o2, d+1);
 		break;
+	case EQ:
+		print_ast(x->o1, d+1);
+		printf("EQ ");
+		print_ast(x->o2, d+1);
+		break;
 	case LT:
 		print_ast(x->o1, d+1);
 		printf("LT ");
@@ -618,30 +644,30 @@ void print_ast(node *x, int d) {
 		print_ast(x->o2, d+1);
 		break;
 	case SYSTEM:
-		printf("SYSTEM ");
-		print_ast(x->o1, d+1);
+		printf ("SYSTEM ");
+		print_ast (x->o1, d+1);
 		break;
 	case PRINT:
-		printf("PRINT ");
-		print_ast(x->o1, d+1);
+		printf ("PRINT ");
+		print_ast (x->o1, d+1);
 		break;
 	case WHILE:
 		printf("WHILE ");
-		print_ast(x->o1, d+1);
-		print_ast(x->o2, d+1);
+		print_ast (x->o1, d+1);
+		print_ast (x->o2, d+1);
 		break;
 	case DO:
 		printf("DO ");
-		print_ast(x->o1, d+1);
+		print_ast (x->o1, d+1);
 		printf("WHILE ");
-		print_ast(x->o2, d+1);
+		print_ast (x->o2, d+1);
 		break;
 	case PROG:
-		printf("PROG ");
+		printf ("PROG ");
 		print_ast (x->o1, d+1);
 		break;
 	case EMPTY:
-		printf("EMPTY ");
+		printf ("EMPTY ");
 		break;
 	default:
 		syntax_error (NULL, "unknown node");
@@ -669,7 +695,7 @@ node *parse(State *s, const char *code) {
 /*----------------------------------------------------------------------------*/
 /* Interpreter */
 
-static list *get_id(State *s, char *id) {
+static list *get_id(State *s, const char *id) {
 	for (list *lst = s->env; lst; lst = lst->next) {
 		if (!strcmp (lst->id, id)) {
 			return lst;
@@ -707,6 +733,36 @@ static void eval_error(State *s) {
 	exit (1);
 }
 
+static char *eval_string(State *state, char * restrict s) {
+	char *res = malloc (2 + strlen (s) * 2);
+	while (*s) {
+		if (!strncmp (s, "${", 2)) {
+			char *e = strchr (s + 2, '}');
+			if (!e) {
+				fprintf (stderr, "missing }\n");
+				return NULL;
+			}
+			*e = 0;
+			size_t len = e - s;
+			list *id = get_id (state, s + 2);
+printf ("jejej %s\n", s+2);
+			if (!id) {
+				fprintf (stderr, "unknown variable}\n");
+				*e = '}';
+				return NULL;
+			}
+			sprintf (res, "%d", id->value);
+			res += strlen (res);
+			s = e + 1;
+			*e = '}';
+		} else {
+			*res++ = *s++;
+		}
+	}
+	*res = 0;
+	return res;
+}
+
 static int eval_expr(State *s, node *x) {
 	switch (x->kind) {
 	case VAR:
@@ -734,6 +790,9 @@ static int eval_expr(State *s, node *x) {
 		return eval_expr (s, x->o1) > eval_expr (s, x->o2);
 	case LT:
 		return eval_expr (s, x->o1) < eval_expr (s, x->o2);
+	case EQ:
+		// check for string types
+		return eval_expr (s, x->o1) == eval_expr (s, x->o2);
 	case SET:
 		{
 			node *var = x->o1;
@@ -761,9 +820,18 @@ void eval_statement(State *s, node *x) {
 		break;
 	case PRINT:
 		if (x->o1->kind == STR) {
-			printf ("%s\n", x->o1->id);
+			char *q = eval_string (s, x->o1->id);
+printf ("evaled string\n");
+			printf ("%s\n", q);
+			free (q);
 		} else {
-			printf ("%d\n", eval_expr (s, x->o1));
+			// TODO this is wip
+			if (x->o1->kind == VAR) {
+printf ("THis is a var\n");
+		//		lookup_value (s, x->o1->id);
+			}
+			int n = eval_expr (s, x->o1);
+			printf ("%d\n", n);
 		}
 		break;
 	case IF:

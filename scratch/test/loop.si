@@ -1,0 +1,35 @@
+#!/usr/bin/env si
+{
+	// dlsym apis
+	dl := import ("dl");
+	a = dl.open ("libc");
+	printf = dl.sym (a, "printf");
+	printf ("Hello World\n");
+	exit = dl.sym(a, "exit");
+	exit(0);
+
+	// functions syntax
+	test = (name) {
+		print ("Hello", name, "!");
+	}
+
+	test ("Jack");
+
+	// example loop test
+	
+	i = 0;
+	msg = "final";
+	while (i < 10) {
+		print (i);
+		if (i == 3) {
+			print("Middle number");
+		} else if (i == 2) {
+			print("Second");
+		}
+		i = i + 1;
+	}
+	print("fuck yeah");
+	print(msg);
+}
+
+// "vim +ft:javascript

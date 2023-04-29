@@ -17,6 +17,7 @@ all:
 # echo '{foo=(num, msg){print("pop");foo(32)}' | ./si
 	echo '{print(32); // oneline comment \n \
 		print(64);}' | ./si | grep 64
+	echo '{a=33;print("$${a}"); }' | ./si
 
 DESTDIR?=
 PREFIX?=/usr/local
